@@ -1,0 +1,20 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: ha-harvest-right
+    volumes:
+      - ./config:/config
+      - ./custom_components/harvest_right:/config/custom_components/harvest_right
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - ./custom_components:/app/custom_components
+      - ./scripts:/app/scripts
+    profiles:
+      - test
