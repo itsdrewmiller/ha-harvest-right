@@ -492,8 +492,8 @@ Key field mapping corrections:
 |---|---|---|
 | `tmp` | `temp` | Temperature |
 | `v` | `mt` | Vacuum pressure (mTorr) |
-| `tim` | `els` | Elapsed time (seconds) |
-| `et` | `eps` | Estimated time (seconds) |
+| `tim` | `els` | Batch elapsed time (seconds) — total time for entire batch |
+| `et` | `eps` | Phase elapsed time (seconds) — time in current phase, NOT estimated time |
 | `otmp` | ? | Oil temp — not seen in "Warming Trays" state, may appear during drying |
 | `wtmp` | ? | Warmer temp — not seen in "Warming Trays" state, may appear during drying |
 
