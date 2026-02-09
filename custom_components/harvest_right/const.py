@@ -20,7 +20,7 @@ SCREEN_STATES: dict[int, str] = {
     3: "Warming Trays",
     4: "Freezing",
     5: "Drying",
-    6: "Final Drying",
+    6: "Drying",
     7: "Extra Dry Time",
     8: "Batch Complete",
     9: "Remove Trays",

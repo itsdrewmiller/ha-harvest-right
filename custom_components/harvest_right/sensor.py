@@ -118,7 +118,7 @@ SENSOR_DESCRIPTIONS: tuple[HarvestRightSensorDescription, ...] = (
         translation_key="state",
         name="State",
         device_class=SensorDeviceClass.ENUM,
-        options=[*SCREEN_STATES.values(), "Unknown"],
+        options=[*dict.fromkeys(SCREEN_STATES.values()), "Unknown"],
         icon="mdi:state-machine",
         value_fn=_get_screen_state,
     ),
