@@ -1,9 +1,10 @@
 {
   "domain": "harvest_right",
   "name": "Harvest Right",
-  "codeowners": [],
+  "codeowners": ["@itsdrewmiller"],
   "config_flow": true,
-  "documentation": "https://github.com/drewmiller/ha-harvest-right",
+  "documentation": "https://github.com/itsdrewmiller/ha-harvest-right",
+  "issue_tracker": "https://github.com/itsdrewmiller/ha-harvest-right/issues",
   "requirements": ["paho-mqtt>=2.0.0"],
   "version": "0.1.0",
   "integration_type": "hub",
