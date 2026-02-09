@@ -111,7 +111,6 @@ SENSOR_DESCRIPTIONS: tuple[HarvestRightSensorDescription, ...] = (
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
-        entity_registry_enabled_default=False,
         value_fn=lambda data: _get_telemetry(data, "rssi"),
     ),
     HarvestRightSensorDescription(
