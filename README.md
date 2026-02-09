@@ -28,6 +28,8 @@ Each freeze dryer appears as its own device in Home Assistant with model, serial
 
 ### HACS (recommended)
 
+If you don't have HACS installed yet, follow the [HACS installation guide](https://hacs.xyz/docs/use/) first.
+
 1. Open HACS in Home Assistant
 2. Click the three-dot menu in the top right and select **Custom repositories**
 3. Paste `https://github.com/itsdrewmiller/ha-harvest-right` and select **Integration** as the category
