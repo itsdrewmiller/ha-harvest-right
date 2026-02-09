@@ -34,7 +34,7 @@ MQTT_KEEPALIVE = 150
 
 SCREEN_STATES = {
     0: "Ready to Start", 1: "Load Trays", 2: "Rotate Trays",
-    3: "Warming Trays", 4: "Freezing", 5: "Drying", 6: "Drying",
+    3: "Warming Trays", 4: "Freezing", 5: "Drying (Heating)", 6: "Drying (Max Temp)",
     7: "Extra Dry Time", 8: "Batch Complete", 9: "Remove Trays",
     10: "Defrosting", 11: "Defrosted", 12: "System Setup", 13: "Time Setup",
     14: "Factory Setup", 15: "Testing", 16: "Settings", 17: "Restarting",
