@@ -15,7 +15,6 @@ _LOGGER = logging.getLogger(__name__)
 
 # Watchdog thresholds (seconds)
 _WATCHDOG_CHECK_INTERVAL = 120  # How often to check for stale connections
-_WATCHDOG_STALE_THRESHOLD = 600  # 10 min: request telemetry refresh
 _WATCHDOG_DEAD_THRESHOLD = 900  # 15 min: force full reconnect
 
 
@@ -31,7 +30,6 @@ class HarvestRightCoordinator:
         self.dryer_data: dict[int, dict] = {}
         self._token_refresh_task: asyncio.Task | None = None
         self._watchdog_task: asyncio.Task | None = None
-        self._telemetry_requested: bool = False
         self._last_reconnect_attempt: float = 0.0
 
     async def async_setup(self) -> None:
@@ -83,8 +81,6 @@ class HarvestRightCoordinator:
         if dryer_id not in self.dryer_data:
             _LOGGER.debug("Received data for unknown dryer %s", dryer_id)
             return
-
-        self._telemetry_requested = False
 
         if msg_type == "telemetry":
             self.dryer_data[dryer_id].update(payload)
@@ -142,23 +138,10 @@ class HarvestRightCoordinator:
                         "No MQTT messages for %.0f seconds, forcing reconnect",
                         silence,
                     )
-                    self._telemetry_requested = False
                     await self.api.ensure_valid_token()
                     await self.hass.async_add_executor_job(
                         self.mqtt.force_reconnect, self.api.access_token
                     )
-                elif silence >= _WATCHDOG_STALE_THRESHOLD and not self._telemetry_requested:
-                    _LOGGER.info(
-                        "No MQTT messages for %.0f seconds, requesting telemetry refresh",
-                        silence,
-                    )
-                    self._telemetry_requested = True
-                    for dryer_id in self.dryer_data:
-                        await self.hass.async_add_executor_job(
-                            self.mqtt.request_telemetry, dryer_id
-                        )
-                elif silence < _WATCHDOG_STALE_THRESHOLD:
-                    self._telemetry_requested = False
 
             except asyncio.CancelledError:
                 raise

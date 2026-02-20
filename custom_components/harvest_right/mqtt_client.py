@@ -55,7 +55,7 @@ class HarvestRightMqttClient:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=client_id,
             transport="websockets",
-            protocol=mqtt.MQTTv5,
+            protocol=mqtt.MQTTv311,
         )
         self._client.ws_set_options(path="/mqtt")
         self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
@@ -107,11 +107,6 @@ class HarvestRightMqttClient:
             self._client.subscribe(topic, qos=0)
             _LOGGER.debug("Subscribed to %s", topic)
 
-    async def publish(self, dryer_id: int, command: str, payload: dict) -> None:
-        """Publish a command to a dryer."""
-        topic = f"act/{self._customer_id}/ed/{dryer_id}/{command}"
-        self._client.publish(topic, json.dumps(payload), qos=0)
-
     def update_token(self, access_token: str) -> None:
         """Update the access token and reconnect to apply it."""
         if access_token == self._access_token:
@@ -144,15 +139,6 @@ class HarvestRightMqttClient:
         self._init_client()
         self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
         self._client.loop_start()
-
-    def request_telemetry(self, dryer_id: int) -> None:
-        """Publish a telemetry refresh request for a dryer."""
-        topic = f"act/{self._customer_id}/ed/{dryer_id}/hr/telemetry"
-        _LOGGER.debug("Requesting telemetry refresh for dryer %s", dryer_id)
-        try:
-            self._client.publish(topic, "{}", qos=0)
-        except Exception:
-            _LOGGER.warning("Failed to publish telemetry request", exc_info=True)
 
     def _on_connect(self, client, userdata, flags, rc, properties=None) -> None:
         """Handle MQTT connection."""

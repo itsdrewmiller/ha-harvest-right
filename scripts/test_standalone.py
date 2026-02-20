@@ -194,7 +194,7 @@ def try_mqtt(
                     topic = f"act/{customer_id}/ed/{did}/m/{msg_type}"
                     client.subscribe(topic, qos=0)
                     log.debug("  subscribed: %s", topic)
-            client.subscribe(f"act/{customer_id}/on", qos=0)
+            # NOTE: Do NOT subscribe to act/{custId}/on — broker disconnects clients that do
             log.info("Subscribed to all topics — waiting for messages ...")
             connected._loop.call_soon_threadsafe(connected.set)
         else:
