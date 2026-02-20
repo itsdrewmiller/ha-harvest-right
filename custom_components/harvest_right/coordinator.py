@@ -32,6 +32,7 @@ class HarvestRightCoordinator:
         self._token_refresh_task: asyncio.Task | None = None
         self._watchdog_task: asyncio.Task | None = None
         self._telemetry_requested: bool = False
+        self._last_reconnect_attempt: float = 0.0
 
     async def async_setup(self) -> None:
         """Login, fetch dryers, connect MQTT, and start background tasks."""
@@ -173,6 +174,13 @@ class HarvestRightCoordinator:
 
     async def _async_refresh_and_reconnect(self) -> None:
         """Refresh the token and force an MQTT reconnect."""
+        # Cooldown: skip if we already tried within the last 60 seconds
+        now = time.monotonic()
+        if now - self._last_reconnect_attempt < 60:
+            _LOGGER.debug("Skipping reconnect attempt (cooldown)")
+            return
+        self._last_reconnect_attempt = now
+
         try:
             _LOGGER.info("MQTT auth failure detected, refreshing token and reconnecting")
             await self.api.refresh_token()

@@ -168,6 +168,12 @@ class HarvestRightMqttClient:
                 self._subscribe_dryer_topics(dryer_id)
         else:
             _LOGGER.error("MQTT connection failed with code %s", rc)
+            # Stop paho's auto-reconnect loop — the coordinator will
+            # handle reconnection with a fresh token via force_reconnect
+            try:
+                client.disconnect()
+            except Exception:
+                pass
             if self._on_connect_fail is not None:
                 self._on_connect_fail()
 
