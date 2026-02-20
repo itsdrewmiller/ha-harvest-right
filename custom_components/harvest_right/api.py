@@ -137,6 +137,17 @@ class HarvestRightApi:
         except aiohttp.ClientError as err:
             raise HarvestRightApiError(f"Connection error: {err}") from err
 
+        if resp.status == 401:
+            _LOGGER.warning("Dryer fetch got 401, refreshing token and retrying")
+            await self.refresh_token()
+            try:
+                resp = await self._session.get(
+                    f"{API_BASE}/freeze-dryer/v1",
+                    headers={"Authorization": f"Bearer {self._access_token}"},
+                )
+            except aiohttp.ClientError as err:
+                raise HarvestRightApiError(f"Connection error: {err}") from err
+
         if resp.status != 200:
             text = await resp.text()
             raise HarvestRightApiError(

@@ -5,9 +5,10 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import HarvestRightApi
+from .api import HarvestRightApi, HarvestRightApiError
 from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
 from .coordinator import HarvestRightCoordinator
 
@@ -25,7 +26,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     coordinator = HarvestRightCoordinator(hass, api, entry.data[CONF_EMAIL])
-    await coordinator.async_setup()
+    try:
+        await coordinator.async_setup()
+    except HarvestRightApiError as err:
+        raise ConfigEntryNotReady(str(err)) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
