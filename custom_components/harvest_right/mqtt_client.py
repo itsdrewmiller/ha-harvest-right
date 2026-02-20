@@ -107,10 +107,6 @@ class HarvestRightMqttClient:
             self._client.subscribe(topic, qos=0)
             _LOGGER.debug("Subscribed to %s", topic)
 
-        # Online/offline status
-        online_topic = f"act/{self._customer_id}/on"
-        self._client.subscribe(online_topic, qos=0)
-
     async def publish(self, dryer_id: int, command: str, payload: dict) -> None:
         """Publish a command to a dryer."""
         topic = f"act/{self._customer_id}/ed/{dryer_id}/{command}"
@@ -208,7 +204,9 @@ class HarvestRightMqttClient:
 
     def _on_disconnect(self, client, userdata, flags, rc, properties=None) -> None:
         """Handle MQTT disconnection."""
-        _LOGGER.warning(
-            "MQTT disconnected (rc=%s, flags=%s, properties=%s)",
-            rc, flags, properties,
-        )
+        if rc != 0:
+            _LOGGER.warning(
+                "Unexpected MQTT disconnect (code %s), will attempt reconnect", rc
+            )
+        else:
+            _LOGGER.debug("MQTT disconnected cleanly")
