@@ -3,6 +3,7 @@
 import json
 import logging
 import ssl
+import time
 import uuid
 from collections.abc import Callable
 
@@ -41,6 +42,8 @@ class HarvestRightMqttClient:
         self._access_token = access_token
         self._on_message = on_message
         self._subscribed_dryers: set[int] = set()
+        self._last_message_time: float = 0.0
+        self._on_connect_fail: Callable[[], None] | None = None
 
         suffix = uuid.uuid4().hex[:8]
         client_id = f"ha-{customer_id}-{suffix}"
@@ -59,6 +62,15 @@ class HarvestRightMqttClient:
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_mqtt_message
         self._client.on_disconnect = self._on_disconnect
+
+    @property
+    def last_message_time(self) -> float:
+        """Return the monotonic time of the last received message."""
+        return self._last_message_time
+
+    def set_on_connect_fail(self, callback: Callable[[], None]) -> None:
+        """Set a callback for connection authentication failures."""
+        self._on_connect_fail = callback
 
     async def connect(self) -> None:
         """Connect to the MQTT broker."""
@@ -94,22 +106,62 @@ class HarvestRightMqttClient:
         self._client.publish(topic, json.dumps(payload), qos=0)
 
     def update_token(self, access_token: str) -> None:
-        """Update the access token for reconnection."""
-        self._access_token = access_token
-        self._client.username_pw_set(self._email, access_token)
+        """Update the access token and reconnect to apply it."""
+        if access_token == self._access_token:
+            _LOGGER.debug("Token unchanged, skipping reconnect")
+            return
+        self.force_reconnect(new_token=access_token)
+
+    def force_reconnect(self, new_token: str | None = None) -> None:
+        """Force a full MQTT reconnect, optionally with a new token.
+
+        Stops the network loop, disconnects, updates credentials if
+        provided, and starts a fresh connection. Safe to call from any thread.
+        """
+        _LOGGER.info("Forcing MQTT reconnect")
+        try:
+            self._client.loop_stop()
+        except Exception:
+            _LOGGER.debug("loop_stop raised during force_reconnect", exc_info=True)
+
+        try:
+            self._client.disconnect()
+        except Exception:
+            _LOGGER.debug("disconnect raised during force_reconnect", exc_info=True)
+
+        if new_token is not None:
+            self._access_token = new_token
+            self._client.username_pw_set(self._email, new_token)
+
+        self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+        self._client.loop_start()
+
+    def request_telemetry(self, dryer_id: int) -> None:
+        """Publish a telemetry refresh request for a dryer."""
+        topic = f"act/{self._customer_id}/ed/{dryer_id}/hr/telemetry"
+        _LOGGER.debug("Requesting telemetry refresh for dryer %s", dryer_id)
+        try:
+            self._client.publish(topic, "{}", qos=0)
+        except Exception:
+            _LOGGER.warning("Failed to publish telemetry request", exc_info=True)
 
     def _on_connect(self, client, userdata, flags, rc, properties=None) -> None:
         """Handle MQTT connection."""
         if rc == 0:
+            self._last_message_time = time.monotonic()
             _LOGGER.debug("Connected to MQTT broker")
             # Resubscribe on reconnect
             for dryer_id in self._subscribed_dryers:
                 self._subscribe_dryer_topics(dryer_id)
         else:
             _LOGGER.error("MQTT connection failed with code %s", rc)
+            if self._on_connect_fail is not None:
+                self._on_connect_fail()
 
     def _on_mqtt_message(self, client, userdata, msg) -> None:
         """Handle incoming MQTT message — runs on paho's network thread."""
+        self._last_message_time = time.monotonic()
+
         # Online/offline topic sends plain strings ("on", "continue"), not JSON
         if msg.topic.endswith("/on"):
             text = msg.payload.decode("utf-8", errors="replace")
@@ -138,6 +190,8 @@ class HarvestRightMqttClient:
     def _on_disconnect(self, client, userdata, flags, rc, properties=None) -> None:
         """Handle MQTT disconnection."""
         if rc != 0:
-            _LOGGER.warning("Unexpected MQTT disconnect (code %s), will reconnect", rc)
+            _LOGGER.warning(
+                "Unexpected MQTT disconnect (code %s), will attempt reconnect", rc
+            )
         else:
             _LOGGER.debug("MQTT disconnected cleanly")
