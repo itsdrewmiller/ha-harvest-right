@@ -13,8 +13,8 @@ from .mqtt_client import HarvestRightMqttClient
 
 _LOGGER = logging.getLogger(__name__)
 
-# Watchdog thresholds (seconds)
-_WATCHDOG_CHECK_INTERVAL = 120  # How often to check for stale connections
+# Background task intervals (seconds)
+_ONLINE_PUBLISH_INTERVAL = 30  # Republish "on" to keep telemetry flowing
 _WATCHDOG_DEAD_THRESHOLD = 900  # 15 min: force full reconnect
 
 
@@ -118,17 +118,25 @@ class HarvestRightCoordinator:
                 await asyncio.sleep(300)
 
     async def _async_watchdog_loop(self) -> None:
-        """Monitor MQTT connection health and reconnect if stale."""
+        """Periodically publish 'on' and monitor connection health.
+
+        The dryer only sends telemetry while it knows a client is listening.
+        Publishing 'on' to act/{custId}/on signals the dryer to keep sending.
+        """
         while True:
             try:
-                await asyncio.sleep(_WATCHDOG_CHECK_INTERVAL)
+                await asyncio.sleep(_ONLINE_PUBLISH_INTERVAL)
 
                 if not self.mqtt:
                     continue
 
+                # Republish "on" to keep telemetry flowing
+                await self.hass.async_add_executor_job(
+                    self.mqtt.publish_online,
+                )
+
                 last_msg = self.mqtt.last_message_time
                 if last_msg == 0.0:
-                    # No messages received yet (still connecting or dryer offline)
                     continue
 
                 silence = time.monotonic() - last_msg

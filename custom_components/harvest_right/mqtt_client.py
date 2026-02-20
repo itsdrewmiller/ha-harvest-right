@@ -8,10 +8,12 @@ import uuid
 from collections.abc import Callable
 
 import paho.mqtt.client as mqtt
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
 
 from homeassistant.core import HomeAssistant
 
-from .const import MQTT_BROKER, MQTT_KEEPALIVE, MQTT_PORT
+from .const import MQTT_BROKER, MQTT_KEEPALIVE, MQTT_PORT, MQTT_SESSION_EXPIRY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,14 +50,17 @@ class HarvestRightMqttClient:
 
     def _init_client(self) -> None:
         """Create and configure the paho MQTT client (blocking — call from executor)."""
-        suffix = uuid.uuid4().hex[:8]
-        client_id = f"ha-{self._customer_id}-{suffix}"
+        suffix = uuid.uuid4().hex[:6]
+        client_id = f"{self._customer_id}-ha-device.{suffix}"
+
+        self._connect_props = Properties(PacketTypes.CONNECT)
+        self._connect_props.SessionExpiryInterval = MQTT_SESSION_EXPIRY
 
         self._client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=client_id,
             transport="websockets",
-            protocol=mqtt.MQTTv311,
+            protocol=mqtt.MQTTv5,
         )
         self._client.ws_set_options(path="/mqtt")
         self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
@@ -84,7 +89,10 @@ class HarvestRightMqttClient:
         """Initialize client and connect (blocking — runs on executor)."""
         if self._client is None:
             self._init_client()
-        self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+        self._client.connect_async(
+            MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE,
+            properties=self._connect_props,
+        )
         self._client.loop_start()
 
     async def disconnect(self) -> None:
@@ -96,9 +104,11 @@ class HarvestRightMqttClient:
         self._client.disconnect()
 
     async def subscribe_dryer(self, dryer_id: int) -> None:
-        """Subscribe to topics for a specific dryer."""
+        """Register a dryer for topic subscription.
+
+        Actual subscribing happens in _on_connect when the connection is ready.
+        """
         self._subscribed_dryers.add(dryer_id)
-        self._subscribe_dryer_topics(dryer_id)
 
     def _subscribe_dryer_topics(self, dryer_id: int) -> None:
         """Subscribe to MQTT topics for a dryer."""
@@ -106,6 +116,18 @@ class HarvestRightMqttClient:
             topic = f"act/{self._customer_id}/ed/{dryer_id}/m/{msg_type}"
             self._client.subscribe(topic, qos=0)
             _LOGGER.debug("Subscribed to %s", topic)
+
+    def publish_online(self) -> None:
+        """Publish 'on' to the online topic to keep telemetry flowing.
+
+        The dryer's WiFi adapter only sends telemetry while it knows a client
+        is listening.  The web app publishes 'on' on connect and periodically.
+        """
+        if self._client is None or not self._client.is_connected():
+            return
+        topic = f"act/{self._customer_id}/on"
+        self._client.publish(topic, "on", qos=0)
+        _LOGGER.debug("Published 'on' to %s", topic)
 
     def update_token(self, access_token: str) -> None:
         """Update the access token and reconnect to apply it."""
@@ -137,7 +159,10 @@ class HarvestRightMqttClient:
 
         # Re-create the client to get a fresh client ID and clean state
         self._init_client()
-        self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+        self._client.connect_async(
+            MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE,
+            properties=self._connect_props,
+        )
         self._client.loop_start()
 
     def _on_connect(self, client, userdata, flags, rc, properties=None) -> None:
@@ -145,9 +170,13 @@ class HarvestRightMqttClient:
         if rc == 0:
             self._last_message_time = time.monotonic()
             _LOGGER.debug("Connected to MQTT broker")
-            # Resubscribe on reconnect
+            # Subscribe to dryer topics
             for dryer_id in self._subscribed_dryers:
                 self._subscribe_dryer_topics(dryer_id)
+            # Publish "on" to signal the dryer to start sending telemetry
+            online_topic = f"act/{self._customer_id}/on"
+            client.publish(online_topic, "on", qos=0)
+            _LOGGER.debug("Published 'on' to %s", online_topic)
         else:
             _LOGGER.error("MQTT connection failed with code %s", rc)
             # Stop paho's auto-reconnect loop — the coordinator will

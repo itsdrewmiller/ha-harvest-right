@@ -5,7 +5,8 @@ DOMAIN = "harvest_right"
 API_BASE = "https://prod.harvestrightapp.com"
 MQTT_BROKER = "mqtt.harvestrightapp.com"
 MQTT_PORT = 8084
-MQTT_KEEPALIVE = 150
+MQTT_KEEPALIVE = 20
+MQTT_SESSION_EXPIRY = 60
 
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
