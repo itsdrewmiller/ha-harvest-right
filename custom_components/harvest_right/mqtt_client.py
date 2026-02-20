@@ -44,9 +44,12 @@ class HarvestRightMqttClient:
         self._subscribed_dryers: set[int] = set()
         self._last_message_time: float = 0.0
         self._on_connect_fail: Callable[[], None] | None = None
+        self._client: mqtt.Client | None = None
 
+    def _init_client(self) -> None:
+        """Create and configure the paho MQTT client (blocking — call from executor)."""
         suffix = uuid.uuid4().hex[:8]
-        client_id = f"ha-{customer_id}-{suffix}"
+        client_id = f"ha-{self._customer_id}-{suffix}"
 
         self._client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -56,7 +59,7 @@ class HarvestRightMqttClient:
         )
         self._client.ws_set_options(path="/mqtt")
         self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
-        self._client.username_pw_set(email, access_token)
+        self._client.username_pw_set(self._email, self._access_token)
         self._client.reconnect_delay_set(min_delay=1, max_delay=120)
 
         self._client.on_connect = self._on_connect
@@ -75,11 +78,19 @@ class HarvestRightMqttClient:
     async def connect(self) -> None:
         """Connect to the MQTT broker."""
         _LOGGER.debug("Connecting to MQTT broker %s:%s", MQTT_BROKER, MQTT_PORT)
+        await self._hass.async_add_executor_job(self._connect_sync)
+
+    def _connect_sync(self) -> None:
+        """Initialize client and connect (blocking — runs on executor)."""
+        if self._client is None:
+            self._init_client()
         self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
         self._client.loop_start()
 
     async def disconnect(self) -> None:
         """Disconnect from the MQTT broker."""
+        if self._client is None:
+            return
         _LOGGER.debug("Disconnecting from MQTT broker")
         self._client.loop_stop()
         self._client.disconnect()
@@ -119,20 +130,22 @@ class HarvestRightMqttClient:
         provided, and starts a fresh connection. Safe to call from any thread.
         """
         _LOGGER.info("Forcing MQTT reconnect")
-        try:
-            self._client.loop_stop()
-        except Exception:
-            _LOGGER.debug("loop_stop raised during force_reconnect", exc_info=True)
-
-        try:
-            self._client.disconnect()
-        except Exception:
-            _LOGGER.debug("disconnect raised during force_reconnect", exc_info=True)
-
         if new_token is not None:
             self._access_token = new_token
-            self._client.username_pw_set(self._email, new_token)
 
+        if self._client is not None:
+            try:
+                self._client.loop_stop()
+            except Exception:
+                _LOGGER.debug("loop_stop raised during force_reconnect", exc_info=True)
+
+            try:
+                self._client.disconnect()
+            except Exception:
+                _LOGGER.debug("disconnect raised during force_reconnect", exc_info=True)
+
+        # Re-create the client to get a fresh client ID and clean state
+        self._init_client()
         self._client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
         self._client.loop_start()
 

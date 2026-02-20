@@ -175,7 +175,7 @@ class HarvestRightCoordinator:
         """Refresh the token and force an MQTT reconnect."""
         try:
             _LOGGER.info("MQTT auth failure detected, refreshing token and reconnecting")
-            await self.api.ensure_valid_token()
+            await self.api.refresh_token()
             if self.mqtt:
                 await self.hass.async_add_executor_job(
                     self.mqtt.force_reconnect, self.api.access_token
