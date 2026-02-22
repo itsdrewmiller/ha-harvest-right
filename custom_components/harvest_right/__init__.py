@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = HarvestRightCoordinator(hass, api, entry.data[CONF_EMAIL])
     try:
         await coordinator.async_setup()
-    except HarvestRightApiError as err:
+    except (HarvestRightApiError, Exception) as err:
         raise ConfigEntryNotReady(str(err)) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
