@@ -117,13 +117,18 @@ class HarvestRightMqttClient:
             self._client.subscribe(topic, qos=0)
             _LOGGER.debug("Subscribed to %s", topic)
 
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the MQTT client is currently connected."""
+        return self._client is not None and self._client.is_connected()
+
     def publish_online(self) -> None:
         """Publish 'on' to the online topic to keep telemetry flowing.
 
         The dryer's WiFi adapter only sends telemetry while it knows a client
         is listening.  The web app publishes 'on' on connect and periodically.
         """
-        if self._client is None or not self._client.is_connected():
+        if not self.is_connected:
             return
         topic = f"act/{self._customer_id}/on"
         self._client.publish(topic, "on", qos=0)
@@ -157,6 +162,10 @@ class HarvestRightMqttClient:
             except Exception:
                 _LOGGER.debug("disconnect raised during force_reconnect", exc_info=True)
 
+        # Reset the timer so the watchdog gives this connection time
+        # to establish before triggering another reconnect
+        self._last_message_time = time.monotonic()
+
         # Re-create the client to get a fresh client ID and clean state
         self._init_client()
         self._client.connect_async(
@@ -169,14 +178,14 @@ class HarvestRightMqttClient:
         """Handle MQTT connection."""
         if rc == 0:
             self._last_message_time = time.monotonic()
-            _LOGGER.debug("Connected to MQTT broker")
+            _LOGGER.info("Connected to MQTT broker successfully")
             # Subscribe to dryer topics
             for dryer_id in self._subscribed_dryers:
                 self._subscribe_dryer_topics(dryer_id)
             # Publish "on" to signal the dryer to start sending telemetry
             online_topic = f"act/{self._customer_id}/on"
             client.publish(online_topic, "on", qos=0)
-            _LOGGER.debug("Published 'on' to %s", online_topic)
+            _LOGGER.info("Published 'on' to %s", online_topic)
         else:
             _LOGGER.error("MQTT connection failed with code %s", rc)
             # Stop paho's auto-reconnect loop — the coordinator will
