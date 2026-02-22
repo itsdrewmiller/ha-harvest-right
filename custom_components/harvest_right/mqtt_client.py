@@ -66,6 +66,7 @@ class HarvestRightMqttClient:
         self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._client.username_pw_set(self._email, self._access_token)
         self._client.reconnect_delay_set(min_delay=1, max_delay=120)
+        self._client.enable_logger(_LOGGER)
 
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_mqtt_message
@@ -89,10 +90,14 @@ class HarvestRightMqttClient:
         """Initialize client and connect (blocking — runs on executor)."""
         if self._client is None:
             self._init_client()
-        self._client.connect_async(
-            MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE,
-            properties=self._connect_props,
-        )
+        try:
+            self._client.connect(
+                MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE,
+                properties=self._connect_props,
+            )
+        except Exception:
+            _LOGGER.exception("MQTT connect failed")
+            raise
         self._client.loop_start()
 
     async def disconnect(self) -> None:
