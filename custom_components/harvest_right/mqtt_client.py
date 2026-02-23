@@ -1,4 +1,4 @@
-"""MQTT over WebSocket client for Harvest Right."""
+"""MQTT client for Harvest Right using native TCP with TLS."""
 
 import json
 import logging
@@ -28,7 +28,7 @@ MessageCallback = Callable[[int, str, dict], None]
 
 
 class HarvestRightMqttClient:
-    """MQTT client for Harvest Right freeze dryers using WebSocket transport."""
+    """MQTT client for Harvest Right freeze dryers using native TCP with TLS."""
 
     def __init__(
         self,
@@ -59,13 +59,13 @@ class HarvestRightMqttClient:
         self._client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=client_id,
-            transport="websockets",
             protocol=mqtt.MQTTv5,
         )
-        self._client.ws_set_options(path="/mqtt")
         self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._client.username_pw_set(self._email, self._access_token)
         self._client.reconnect_delay_set(min_delay=1, max_delay=120)
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            self._client.enable_logger(_LOGGER)
 
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_mqtt_message
@@ -80,15 +80,26 @@ class HarvestRightMqttClient:
         """Set a callback for connection authentication failures."""
         self._on_connect_fail = callback
 
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the MQTT client is currently connected."""
+        return self._client is not None and self._client.is_connected()
+
     async def connect(self) -> None:
-        """Connect to the MQTT broker."""
-        _LOGGER.debug("Connecting to MQTT broker %s:%s", MQTT_BROKER, MQTT_PORT)
+        """Connect to the MQTT broker (non-blocking).
+
+        The actual connection happens on paho's network thread.
+        If the broker is unreachable, _on_connect will never fire
+        and the watchdog will eventually trigger a reconnect.
+        """
+        _LOGGER.info("Connecting to MQTT broker %s:%s", MQTT_BROKER, MQTT_PORT)
         await self._hass.async_add_executor_job(self._connect_sync)
 
     def _connect_sync(self) -> None:
-        """Initialize client and connect (blocking — runs on executor)."""
+        """Initialize client and start async connect (runs on executor)."""
         if self._client is None:
             self._init_client()
+        self._last_message_time = time.monotonic()
         self._client.connect_async(
             MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE,
             properties=self._connect_props,
@@ -157,6 +168,10 @@ class HarvestRightMqttClient:
             except Exception:
                 _LOGGER.debug("disconnect raised during force_reconnect", exc_info=True)
 
+        # Reset the timer so the watchdog gives this connection time
+        # to establish before triggering another reconnect
+        self._last_message_time = time.monotonic()
+
         # Re-create the client to get a fresh client ID and clean state
         self._init_client()
         self._client.connect_async(
@@ -169,7 +184,7 @@ class HarvestRightMqttClient:
         """Handle MQTT connection."""
         if rc == 0:
             self._last_message_time = time.monotonic()
-            _LOGGER.debug("Connected to MQTT broker")
+            _LOGGER.info("Connected to MQTT broker successfully")
             # Subscribe to dryer topics
             for dryer_id in self._subscribed_dryers:
                 self._subscribe_dryer_topics(dryer_id)

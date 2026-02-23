@@ -122,6 +122,9 @@ class HarvestRightCoordinator:
 
         The dryer only sends telemetry while it knows a client is listening.
         Publishing 'on' to act/{custId}/on signals the dryer to keep sending.
+        If the connection is alive but the dryer is idle, we do NOT reconnect —
+        the periodic 'on' publish is sufficient to resume telemetry when the
+        dryer starts a batch.
         """
         while True:
             try:
@@ -135,6 +138,14 @@ class HarvestRightCoordinator:
                     self.mqtt.publish_online,
                 )
 
+                # If the client reports connected, the link is alive —
+                # the dryer is just idle.  No need to reconnect.
+                connected = await self.hass.async_add_executor_job(
+                    lambda: self.mqtt.is_connected,
+                )
+                if connected:
+                    continue
+
                 last_msg = self.mqtt.last_message_time
                 if last_msg == 0.0:
                     continue
@@ -143,7 +154,7 @@ class HarvestRightCoordinator:
 
                 if silence >= _WATCHDOG_DEAD_THRESHOLD:
                     _LOGGER.warning(
-                        "No MQTT messages for %.0f seconds, forcing reconnect",
+                        "MQTT disconnected for %.0f seconds, forcing reconnect",
                         silence,
                     )
                     await self.api.ensure_valid_token()
