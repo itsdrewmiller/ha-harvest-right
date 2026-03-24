@@ -24,7 +24,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SCREEN_STATES
+from .const import DOMAIN, DRYING_SCREENS, SCREEN_STATES, get_drying_state
 from .coordinator import HarvestRightCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,10 +51,13 @@ def _get_system(data: dict, key: str):
 
 
 def _get_screen_state(data: dict) -> str | None:
-    """Map screen number to state name."""
+    """Map screen number to state name, using df bitmask for drying screens."""
     screen = data.get("screen")
     if screen is None:
         return None
+    if screen in DRYING_SCREENS:
+        df = data.get("df", 0)
+        return get_drying_state(df)
     return SCREEN_STATES.get(screen, "Unknown")
 
 
@@ -118,7 +121,7 @@ SENSOR_DESCRIPTIONS: tuple[HarvestRightSensorDescription, ...] = (
         translation_key="state",
         name="State",
         device_class=SensorDeviceClass.ENUM,
-        options=[*dict.fromkeys(SCREEN_STATES.values()), "Unknown"],
+        options=[*dict.fromkeys(SCREEN_STATES.values()), "Extra Dry Time", "Dehydrating", "Unknown"],
         icon="mdi:state-machine",
         value_fn=_get_screen_state,
     ),
@@ -164,8 +167,8 @@ SENSOR_DESCRIPTIONS: tuple[HarvestRightSensorDescription, ...] = (
     HarvestRightSensorDescription(
         key="defrost_flag",
         translation_key="defrost_flag",
-        name="Defrost Flag (df)",
-        icon="mdi:snowflake-melt",
+        name="Drying Flags (df)",
+        icon="mdi:flag-variant",
         value_fn=lambda data: _get_telemetry(data, "df"),
         entity_registry_enabled_default=False,
     ),

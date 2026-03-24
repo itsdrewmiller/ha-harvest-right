@@ -14,6 +14,7 @@ CONF_PASSWORD = "password"
 # Screen number to state name mapping
 # Note: spec listed "Offline" as screen 0, but offline means no telemetry.
 # Actual device screen numbers are offset by -1 from the spec.
+# Screens 5/6 show "Drying" by default; the `df` bitmask determines sub-states.
 SCREEN_STATES: dict[int, str] = {
     0: "Ready to Start",
     1: "Load Trays",
@@ -42,6 +43,33 @@ SCREEN_STATES: dict[int, str] = {
     25: "Not Detecting Heat",
     26: "Time Expired",
 }
+
+# df bitmask flags (from mobile app main.dart.js)
+# The `df` telemetry field is a bitmask that modifies the display label
+# for drying screens (5 and 6).
+DF_VAC_FREEZE = 1      # bit 0: Vac Freeze drying mode
+DF_FINAL_DRY = 4       # bit 2: Final Dry Time active
+DF_EXTRA_DRY = 8       # bit 3: Extra Dry Time active
+DF_DEHYDRATE = 64      # bit 6: Dehydrate mode
+
+
+def get_drying_state(df: int) -> str:
+    """Determine the drying sub-state from the df bitmask.
+
+    The mobile app checks bits in this priority order (from main.dart.js):
+    1. df & 1  -> "Drying" (Vac Freeze mode)
+    2. df & 64 -> "Dehydrating"
+    3. df & 8  -> "Extra Dry Time"
+    4. else    -> "Drying"
+    """
+    if df & DF_VAC_FREEZE:
+        return "Drying"
+    if df & DF_DEHYDRATE:
+        return "Dehydrating"
+    if df & DF_EXTRA_DRY:
+        return "Extra Dry Time"
+    return "Drying"
+
 
 # Screen sets for binary sensor conditions
 RUNNING_SCREENS = {1, 2, 3, 4, 5, 6, 7, 18}
