@@ -53,22 +53,23 @@ DF_EXTRA_DRY = 8       # bit 3: Extra Dry Time active
 DF_DEHYDRATE = 64      # bit 6: Dehydrate mode
 
 
-def get_drying_state(df: int) -> str:
+def get_drying_state(screen: int, df: int) -> str:
     """Determine the drying sub-state from the df bitmask.
 
     The mobile app checks bits in this priority order (from main.dart.js):
     1. df & 1  -> "Drying" (Vac Freeze mode)
     2. df & 64 -> "Dehydrating"
     3. df & 8  -> "Extra Dry Time"
-    4. else    -> "Drying"
+    4. else    -> fall back to screen-based label
+
+    When no special bit is set, returns the default SCREEN_STATES label
+    (e.g. "Drying (Heating)" or "Drying (Max Temp)").
     """
-    if df & DF_VAC_FREEZE:
-        return "Drying"
     if df & DF_DEHYDRATE:
         return "Dehydrating"
     if df & DF_EXTRA_DRY:
         return "Extra Dry Time"
-    return "Drying"
+    return SCREEN_STATES.get(screen, "Drying")
 
 
 # Screen sets for binary sensor conditions

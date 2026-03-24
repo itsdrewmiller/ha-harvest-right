@@ -57,7 +57,7 @@ def _get_screen_state(data: dict) -> str | None:
         return None
     if screen in DRYING_SCREENS:
         df = data.get("df", 0)
-        return get_drying_state(df)
+        return get_drying_state(screen, df)
     return SCREEN_STATES.get(screen, "Unknown")
 
 
