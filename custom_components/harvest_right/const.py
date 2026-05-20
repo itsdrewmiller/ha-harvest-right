@@ -1,5 +1,9 @@
 """Constants for the Harvest Right integration."""
 
+from __future__ import annotations
+
+from datetime import timedelta
+
 DOMAIN = "harvest_right"
 
 API_BASE = "https://prod.harvestrightapp.com"
@@ -8,8 +12,35 @@ MQTT_PORT = 8883
 MQTT_KEEPALIVE = 20
 MQTT_SESSION_EXPIRY = 60
 
+# Config entry data keys
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
+CONF_REFRESH_TOKEN = "refresh_token"
+CONF_CUSTOMER_ID = "customer_id"
+
+# Options keys
+OPT_TEMPERATURE_UNIT = "temperature_unit"
+OPT_SCAN_INTERVAL = "scan_interval"
+
+TEMP_UNIT_FAHRENHEIT = "fahrenheit"
+TEMP_UNIT_CELSIUS = "celsius"
+DEFAULT_TEMPERATURE_UNIT = TEMP_UNIT_FAHRENHEIT
+
+# How often to re-poll the REST dryer list to discover added/removed dryers.
+DEFAULT_SCAN_INTERVAL_MINUTES = 30
+MIN_SCAN_INTERVAL_MINUTES = 5
+MAX_SCAN_INTERVAL_MINUTES = 360
+
+# A dryer is considered offline if no MQTT message has arrived for this long.
+# The watchdog republishes "on" every 30s and a connected adapter answers
+# within seconds, so 5 minutes (10 missed cycles) is a safe offline signal.
+STALE_THRESHOLD = timedelta(minutes=5)
+
+# Service name for forcing a telemetry refresh.
+SERVICE_REFRESH = "refresh"
+
+# Event fired on the HA bus when a batch-summary MQTT message is received.
+EVENT_BATCH_SUMMARY = f"{DOMAIN}_batch_summary"
 
 # Screen number to state name mapping
 # Note: spec listed "Offline" as screen 0, but offline means no telemetry.
@@ -47,10 +78,15 @@ SCREEN_STATES: dict[int, str] = {
 # df bitmask flags (from mobile app main.dart.js)
 # The `df` telemetry field is a bitmask that modifies the display label
 # for drying screens (5 and 6).
-DF_VAC_FREEZE = 1      # bit 0: Vac Freeze drying mode
-DF_FINAL_DRY = 4       # bit 2: Final Dry Time active
-DF_EXTRA_DRY = 8       # bit 3: Extra Dry Time active
-DF_DEHYDRATE = 64      # bit 6: Dehydrate mode
+DF_VAC_FREEZE = 1  # bit 0: Vac Freeze drying mode
+DF_FINAL_DRY = 4  # bit 2: Final Dry Time active
+DF_EXTRA_DRY = 8  # bit 3: Extra Dry Time active
+DF_DEHYDRATE = 64  # bit 6: Dehydrate mode
+
+# Drying sub-state labels get_drying_state() can return.
+DRYING_STATE_DEHYDRATING = "Dehydrating"
+DRYING_STATE_EXTRA_DRY = "Extra Dry Time"
+DRYING_STATE_DEFAULT = "Drying"
 
 
 def get_drying_state(screen: int, df: int) -> str:
@@ -66,16 +102,28 @@ def get_drying_state(screen: int, df: int) -> str:
     (e.g. "Drying (Heating)" or "Drying (Max Temp)").
     """
     if df & DF_DEHYDRATE:
-        return "Dehydrating"
+        return DRYING_STATE_DEHYDRATING
     if df & DF_EXTRA_DRY:
-        return "Extra Dry Time"
-    return SCREEN_STATES.get(screen, "Drying")
+        return DRYING_STATE_EXTRA_DRY
+    return SCREEN_STATES.get(screen, DRYING_STATE_DEFAULT)
 
+
+# Full set of values the "state" ENUM sensor can report. Includes the bare
+# "Drying" fallback that get_drying_state() can return for an unmapped screen.
+STATE_OPTIONS: list[str] = list(
+    dict.fromkeys(
+        [
+            *SCREEN_STATES.values(),
+            DRYING_STATE_EXTRA_DRY,
+            DRYING_STATE_DEHYDRATING,
+            DRYING_STATE_DEFAULT,
+            "Unknown",
+        ]
+    )
+)
 
 # Screen sets for binary sensor conditions
 RUNNING_SCREENS = {1, 2, 3, 4, 5, 6, 7, 18}
 FREEZING_SCREENS = {4}
 DRYING_SCREENS = {5, 6}
 ERROR_SCREENS = {23, 24, 25, 26}
-
-PLATFORMS = ["sensor", "binary_sensor"]
