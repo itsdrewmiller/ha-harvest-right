@@ -1,0 +1,6 @@
+# Test dependencies for the Harvest Right integration.
+# pytest-homeassistant-custom-component pins a matching Home Assistant
+# release and the full pytest plugin stack.
+pytest-homeassistant-custom-component
+pytest-cov
+ruff

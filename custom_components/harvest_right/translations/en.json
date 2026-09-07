@@ -3,18 +3,84 @@
     "step": {
       "user": {
         "title": "Harvest Right Login",
+        "description": "Enter the email and password for your Harvest Right account — the same credentials you use in the Harvest Right app. Your freeze dryer must already be set up in that app and connected to Wi-Fi.",
         "data": {
           "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Harvest Right",
+        "description": "The saved session for {email} has expired. Enter the password for this account to reconnect.",
+        "data": {
           "password": "Password"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid email or password",
-      "cannot_connect": "Unable to connect to Harvest Right servers"
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Unable to connect to Harvest Right servers. Check your internet connection and try again.",
+      "no_dryers": "No freeze dryers were found on this account. Add your dryer in the Harvest Right app first, then retry.",
+      "wrong_account": "Those credentials are for a different Harvest Right account than the one being re-authenticated.",
+      "unknown": "An unexpected error occurred. See the Home Assistant logs for details."
     },
     "abort": {
-      "already_configured": "This account is already configured"
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Harvest Right Options",
+        "data": {
+          "temperature_unit": "Temperature unit reported by the dryer",
+          "scan_interval": "How often to check for added or removed dryers"
+        },
+        "data_description": {
+          "temperature_unit": "Set this to match the unit your freeze dryer's display uses, so Home Assistant labels readings correctly.",
+          "scan_interval": "In minutes. Live telemetry is always pushed instantly over MQTT; this only controls how often the dryer list itself is re-checked."
+        }
+      }
+    }
+  },
+  "selector": {
+    "temperature_unit": {
+      "options": {
+        "fahrenheit": "Fahrenheit (°F)",
+        "celsius": "Celsius (°C)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "temperature": { "name": "Temperature" },
+      "vacuum_pressure": { "name": "Vacuum pressure" },
+      "elapsed_time": { "name": "Batch elapsed time" },
+      "phase_elapsed_time": { "name": "Phase elapsed time" },
+      "progress": { "name": "Progress" },
+      "state": { "name": "State" },
+      "batch_name": { "name": "Batch name" },
+      "batch_count": { "name": "Batch count" },
+      "wifi_signal": { "name": "Wi-Fi signal" },
+      "adapter_name": { "name": "Wi-Fi adapter" },
+      "screen_number": { "name": "Screen number" },
+      "mode": { "name": "Mode" },
+      "shelves": { "name": "Shelves" },
+      "drying_flags": { "name": "Drying flags" }
+    },
+    "binary_sensor": {
+      "running": { "name": "Running" },
+      "freezing": { "name": "Freezing" },
+      "drying": { "name": "Drying" },
+      "error": { "name": "Error" },
+      "online": { "name": "Online" }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh telemetry",
+      "description": "Asks the freeze dryer(s) to send fresh telemetry immediately instead of waiting for the next periodic update."
     }
   }
 }
