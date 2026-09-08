@@ -1,6 +1,6 @@
 [project]
 name = "ha-harvest-right"
-version = "0.9.0"
+version = "0.9.1"
 description = "Home Assistant integration for Harvest Right freeze dryers"
 requires-python = ">=3.13"
 

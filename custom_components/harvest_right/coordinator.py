@@ -34,7 +34,8 @@ _LOGGER = logging.getLogger(__name__)
 _ONLINE_PUBLISH_INTERVAL = 30  # Republish "on" to keep telemetry flowing
 _WATCHDOG_DEAD_THRESHOLD = 900  # 15 min of silence: force a full reconnect
 _MIN_TOKEN_REFRESH_INTERVAL = 300  # never hammer the auth endpoint faster
-_RECONNECT_COOLDOWN = 60  # min seconds between reconnect attempts
+_RECONNECT_INITIAL_DELAY = 60
+_RECONNECT_MAX_DELAY = 24 * 60 * 60  # 24 hours
 
 
 class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
@@ -70,7 +71,9 @@ class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
         self._dryer_last_msg: dict[int, float] = {}
         self._token_refresh_task: asyncio.Task | None = None
         self._watchdog_task: asyncio.Task | None = None
-        self._last_reconnect_attempt: float = 0.0
+        self._next_reconnect_attempt: float | None = None
+        self._reconnect_delay = _RECONNECT_INITIAL_DELAY
+        self._reconnect_in_progress = False
 
     # ── Setup / teardown ─────────────────────────────────────────────────
 
@@ -286,6 +289,12 @@ class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
                 await self.hass.async_add_executor_job(self.mqtt.publish_online)
 
                 if self.mqtt.is_connected:
+                    self._next_reconnect_attempt = None
+                    self._reconnect_delay = _RECONNECT_INITIAL_DELAY
+                    continue
+
+                if self._next_reconnect_attempt is not None:
+                    await self._reconnect_mqtt()
                     continue
 
                 silence = time.monotonic() - self.mqtt.last_message_time
@@ -305,28 +314,35 @@ class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
         )
 
     async def _async_refresh_and_reconnect(self) -> None:
-        """Refresh the token and reconnect MQTT, with a cooldown."""
-        now = time.monotonic()
-        if now - self._last_reconnect_attempt < _RECONNECT_COOLDOWN:
-            _LOGGER.debug("Skipping reconnect attempt (cooldown)")
-            return
-        self._last_reconnect_attempt = now
+        """Refresh the token and reconnect MQTT, with exponential backoff."""
         _LOGGER.info("MQTT auth failure detected, refreshing token")
         await self._reconnect_mqtt()
 
     async def _reconnect_mqtt(self) -> None:
-        """Refresh the token and force a fresh MQTT connection."""
+        """Refresh and reconnect, sharing backoff across all retry triggers."""
+        if self.mqtt is None or self._reconnect_in_progress:
+            return
+        now = time.monotonic()
+        if (
+            self._next_reconnect_attempt is not None
+            and now < self._next_reconnect_attempt
+        ):
+            return
+
+        self._reconnect_in_progress = True
+        self._next_reconnect_attempt = now + self._reconnect_delay
+        self._reconnect_delay = min(self._reconnect_delay * 2, _RECONNECT_MAX_DELAY)
         try:
             await self.api.ensure_valid_token()
             await self._persist_refresh_token()
-        except HarvestRightAuthError as err:
-            _LOGGER.warning("Reconnect needs re-auth: %s", err)
-            self.entry.async_start_reauth(self.hass)
-            return
-        except Exception:
-            _LOGGER.exception("Failed to refresh token before reconnect")
-            return
-        if self.mqtt:
             await self.hass.async_add_executor_job(
                 self.mqtt.force_reconnect, self.api.access_token
             )
+        except HarvestRightAuthError as err:
+            self._next_reconnect_attempt = None
+            _LOGGER.warning("Reconnect needs re-auth: %s", err)
+            self.entry.async_start_reauth(self.hass)
+        except Exception:
+            _LOGGER.exception("Failed to refresh token or reconnect MQTT")
+        finally:
+            self._reconnect_in_progress = False
