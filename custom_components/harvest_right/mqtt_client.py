@@ -15,7 +15,13 @@ import paho.mqtt.client as mqtt
 from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
-from .const import MQTT_BROKER, MQTT_KEEPALIVE, MQTT_PORT, MQTT_SESSION_EXPIRY
+from .const import (
+    MQTT_BROKER,
+    MQTT_CLIENT_ID_TAG,
+    MQTT_KEEPALIVE,
+    MQTT_PORT,
+    MQTT_SESSION_EXPIRY,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +64,10 @@ class HarvestRightMqttClient:
         self._last_message_time: float = 0.0
         self._on_connect_fail: Callable[[], None] | None = None
         self._client: mqtt.Client | None = None
+        # One stable client ID per account. A fresh random ID on every
+        # reconnect looks like a flood of new clients to the broker.
+        suffix = uuid.uuid5(uuid.NAMESPACE_URL, f"harvest_right:{customer_id}").hex[:6]
+        self.client_id = f"{customer_id}-{MQTT_CLIENT_ID_TAG}.{suffix}"
         self._lock = threading.Lock()
 
         self._connect_props = Properties(PacketTypes.CONNECT)
@@ -84,12 +94,9 @@ class HarvestRightMqttClient:
 
     def _build_client(self) -> mqtt.Client:
         """Create and configure a fresh paho client (blocking)."""
-        suffix = uuid.uuid4().hex[:6]
-        client_id = f"{self._customer_id}-ha-device.{suffix}"
-
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=client_id,
+            client_id=self.client_id,
             protocol=mqtt.MQTTv5,
         )
         # PROTOCOL_TLS_CLIENT enables certificate + hostname verification.
@@ -210,20 +217,23 @@ class HarvestRightMqttClient:
             else:
                 _LOGGER.debug("Subscribed to %s", topic)
 
-    def publish_online(self) -> None:
-        """Publish 'on' to the online topic to keep telemetry flowing.
+    def publish_online(self, payload: str = "continue") -> None:
+        """Publish to the online topic to keep telemetry flowing.
 
         The dryer's WiFi adapter only sends telemetry while it knows a
-        client is listening. The web app publishes 'on' on connect and
-        periodically; we mirror that.
+        client is listening. "on" (sent on connect, and by the refresh
+        service) makes the dryer resend its latest status plus a fresh
+        ``system`` message. The periodic keep-alive should send "continue",
+        which keeps telemetry flowing without that redundant resend, per
+        guidance from Harvest Right (issue #4).
         """
         client = self._client
         if client is None or not client.is_connected():
             return
         topic = f"act/{self._customer_id}/on"
-        info = client.publish(topic, "on", qos=0)
+        info = client.publish(topic, payload, qos=0)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            _LOGGER.debug("Publish 'on' to %s failed (rc=%s)", topic, info.rc)
+            _LOGGER.debug("Publish %r to %s failed (rc=%s)", payload, topic, info.rc)
 
     # ── paho callbacks (run on paho's network thread) ─────────────────────
 
