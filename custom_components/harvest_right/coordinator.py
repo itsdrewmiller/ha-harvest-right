@@ -31,7 +31,7 @@ from .mqtt_client import HarvestRightMqttClient
 _LOGGER = logging.getLogger(__name__)
 
 # Background task intervals (seconds)
-_ONLINE_PUBLISH_INTERVAL = 30  # Republish "on" to keep telemetry flowing
+_ONLINE_PUBLISH_INTERVAL = 30  # Publish "continue" to keep telemetry flowing
 _WATCHDOG_DEAD_THRESHOLD = 900  # 15 min of silence: force a full reconnect
 _MIN_TOKEN_REFRESH_INTERVAL = 300  # never hammer the auth endpoint faster
 _RECONNECT_INITIAL_DELAY = 60
@@ -233,7 +233,7 @@ class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
     async def async_refresh_telemetry(self) -> None:
         """Republish 'on' immediately to prompt fresh telemetry."""
         if self.mqtt:
-            await self.hass.async_add_executor_job(self.mqtt.publish_online)
+            await self.hass.async_add_executor_job(self.mqtt.publish_online, "on")
 
     # ── Token persistence ────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ class HarvestRightCoordinator(DataUpdateCoordinator[dict[int, dict]]):
                 await asyncio.sleep(300)
 
     async def _async_watchdog_loop(self) -> None:
-        """Republish 'on' periodically and force a reconnect on long silence."""
+        """Publish "continue" periodically and force a reconnect on long silence."""
         while True:
             try:
                 await asyncio.sleep(_ONLINE_PUBLISH_INTERVAL)

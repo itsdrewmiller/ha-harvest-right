@@ -9,6 +9,11 @@ DOMAIN = "harvest_right"
 API_BASE = "https://prod.harvestrightapp.com"
 MQTT_BROKER = "mqtt.harvestrightapp.com"
 MQTT_PORT = 8883
+# Harvest Right bans MQTT client IDs of the form "<customer_id>-ha-device.*"
+# (CONNACK 0x8A Banned). They confirmed "<customer_id>-home-assist.*" is the
+# allowed pattern for this integration, and asked that it stay stable across
+# reconnects. See issues #3 and #4.
+MQTT_CLIENT_ID_TAG = "home-assist"
 MQTT_KEEPALIVE = 20
 MQTT_SESSION_EXPIRY = 60
 
