@@ -67,7 +67,9 @@
       "screen_number": { "name": "Screen number" },
       "mode": { "name": "Mode" },
       "shelves": { "name": "Shelves" },
-      "drying_flags": { "name": "Drying flags" }
+      "drying_flags": { "name": "Drying flags" },
+      "pump_runtime": { "name": "Pump run time" },
+      "system_runtime": { "name": "System run time" }
     },
     "binary_sensor": {
       "running": { "name": "Running" },

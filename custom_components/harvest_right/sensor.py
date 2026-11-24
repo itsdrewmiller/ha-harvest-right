@@ -30,6 +30,10 @@ class HarvestRightSensorDescription(SensorEntityDescription):
     """Describe a Harvest Right sensor."""
 
     value_fn: Callable[[dict], str | int | float | None]
+    # Optional reader for the dryer's REST record (the "raw" dict kept by
+    # normalize_dryer). Used for lifetime counters that never appear in the
+    # MQTT telemetry. When it returns a value it takes precedence over value_fn.
+    dryer_fn: Callable[[dict], str | int | float | None] | None = None
 
 
 def _system(data: dict, key: str):
@@ -114,6 +118,31 @@ PRIMARY_SENSORS: tuple[HarvestRightSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:counter",
         value_fn=lambda d: _system(d, "bc"),
+        dryer_fn=lambda r: r.get("completed_batches"),
+    ),
+    # Lifetime run-time counters from the REST dryer record. The API calls
+    # them pump_min / system_min, but the values look like hours: a dryer with
+    # 30 completed batches reports 689 / 905, which is about 23 h of pumping
+    # and 30 h of run time per batch (as minutes they would be far too small).
+    HarvestRightSensorDescription(
+        key="pump_runtime",
+        translation_key="pump_runtime",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:pump",
+        value_fn=lambda d: None,
+        dryer_fn=lambda r: r.get("pump_min"),
+    ),
+    HarvestRightSensorDescription(
+        key="system_runtime",
+        translation_key="system_runtime",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:timer-cog-outline",
+        value_fn=lambda d: None,
+        dryer_fn=lambda r: r.get("system_min"),
     ),
 )
 
@@ -206,6 +235,19 @@ class HarvestRightSensor(HarvestRightEntity, SensorEntity):
             self._attr_native_unit_of_measurement = coordinator.temperature_unit
 
     @property
+    def _dryer_raw(self) -> dict:
+        """Return the raw REST record for this dryer, or an empty dict."""
+        for dryer in self.coordinator.dryers:
+            if dryer.get("id") == self._dryer_id:
+                raw = dryer.get("raw")
+                return raw if isinstance(raw, dict) else {}
+        return {}
+
+    @property
     def native_value(self) -> str | int | float | None:
         """Return the current sensor value."""
+        if self.entity_description.dryer_fn is not None:
+            value = self.entity_description.dryer_fn(self._dryer_raw)
+            if value is not None:
+                return value
         return self.entity_description.value_fn(self._telemetry)

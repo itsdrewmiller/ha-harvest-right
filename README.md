@@ -15,7 +15,8 @@ Each freeze dryer registered to your account appears as its own Home Assistant d
 - Progress (%)
 - State (Ready to Start, Freezing, Drying, Batch Complete, error states, …)
 - Batch name
-- Batch count
+- Batch count (lifetime completed batches, from the dryer record)
+- Pump run time and System run time (lifetime hours, from the dryer record)
 
 **Binary sensors**
 
